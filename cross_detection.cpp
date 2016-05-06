@@ -11,7 +11,7 @@ using namespace std;
 using namespace cv::xfeatures2d;
 
 //Additional functions
-Mat FindMark(Mat* thresh);
+Mat FindMark(Mat* thresh, Mat* frame);
 
 int main(int argc, char** argv)
 {
@@ -32,7 +32,7 @@ int main(int argc, char** argv)
 	Mat descriptors_1, descriptors_2;
 
 	//set feature detector
-	Ptr<SiftFeatureDetector> detector = SiftFeatureDetector::create();
+	Ptr<SiftFeatureDetector> detector = SiftFeatureDetector::create(0,3,0.04,10,1.6);
 	detector->detect(img, keypoints_1);
 
 	//set descriptor extractor
@@ -60,13 +60,14 @@ int main(int argc, char** argv)
 		capture >> frame;
 		if (frame.empty()) break;
 
-		GaussianBlur(frame, frame, Size(5, 5), 4);
+		GaussianBlur(frame, frame, Size(3, 3), 4);
 		cvtColor(frame, frame_gray, COLOR_BGR2GRAY);
-		inRange(frame_gray, Scalar(180), Scalar(255), frame_thresh);
+		adaptiveThreshold(frame_gray, frame_thresh, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY, 11, 2);
+		imshow("Adaptative threshold", frame_thresh);
 
 		///-- STEP 3: Find Mark outline with shape detection
 		Mat ROI;
-		ROI = FindMark(&frame_thresh);
+		ROI = FindMark(&frame_thresh, &frame);
 
 		/// -- STEP 4 : Extract features of frame
 
@@ -132,15 +133,15 @@ int main(int argc, char** argv)
 
 //This function returns a ROI 
 //enclosing the biggest 4 sided shape it finds
-Mat FindMark(Mat * frame)
+Mat FindMark(Mat * thresh, Mat * frame)
 {
 	vector<vector<Point>> cnts;
 	vector<Point> poligon, best_candidate;
 	Rect rectBoundedToMark;
-	Mat frame_copy = frame->clone();
+	Mat frame_thresh_copy = thresh->clone();
 
 	//find contours on the frame
-	findContours(frame_copy.clone(), cnts, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
+	findContours(frame_thresh_copy.clone(), cnts, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
 	cout << cnts.size() << " contornos detectados" << endl;
 
 	//approximate contours to poligons
@@ -169,6 +170,7 @@ Mat FindMark(Mat * frame)
 	//Return a Rect enclosing the biggest rectangle
 	//if there is no candidate
 	//search on the whole image
+	Mat frame_copy = frame->clone();
 	rectBoundedToMark = boundingRect(best_candidate);
 	if (ROI_found)
 		return frame_copy(rectBoundedToMark);
