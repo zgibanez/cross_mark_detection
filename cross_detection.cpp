@@ -65,19 +65,16 @@ int main(int argc, char** argv)
 		adaptiveThreshold(frame_gray, frame_thresh, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY, 11, 2);
 		imshow("Adaptative threshold", frame_thresh);
 
-		///-- STEP 3: Find Mark outline with shape detection
+		///-- STEP 3: Find in the thresholded frame the mark's outline with shape detection
+		/// we will use the outline as our ROI
 		Mat ROI;
 		ROI = FindMark(&frame_thresh, &frame);
 
-		/// -- STEP 4 : Extract features of frame
-
-		//detect features on frame with SIFT
+		/// -- STEP 4 : Extract features of the ROI
 		detector->detect(ROI, keypoints_2);
 		extractor->compute(ROI, keypoints_2, descriptors_2);
 
 		/// -- STEP 5 : Find and filter matches
-
-		//set BruteForce matcher
 		BFMatcher matcher;
 
 		//Filter 1: Lowe's ratio
@@ -113,8 +110,9 @@ int main(int argc, char** argv)
 
 		cout << good_matches2.size() << " puntos filtrados con Cross-checking " << endl;
 		
+		//Filter 3: Symmetry Test
 
-		//--Step 6: Present data
+		///--Step 6: Present data
 		Mat img_matches;
 		drawMatches(img, keypoints_1, ROI, keypoints_2, good_matches, img_matches, Scalar(0,255,0), Scalar(0, 255, 0),
 			vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
