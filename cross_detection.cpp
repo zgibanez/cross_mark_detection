@@ -70,7 +70,7 @@ int main(int argc, char** argv)
 		///-- STEP 3: Find in the thresholded frame the mark's outline with shape detection
 		/// we will use the outline as our ROI
 		Mat ROI;
-		ROI = FindMark(&frame_thresh, &frame_gray);
+		ROI = FindMark(&frame_thresh, &frame);
 
 		/// -- STEP 4 : Extract features of the ROI
 		detector->detect(ROI, keypoints_2);
@@ -80,16 +80,15 @@ int main(int argc, char** argv)
 		/// -- STEP 5 : Find and filter matches
 		BFMatcher matcher;
 
-		//Filter 1: Lowe's ratio
-		vector<vector<DMatch>> matches;
+		//if the frame descriptor is empty
+		//skip matching
 		if (!descriptors_2.empty())
 		{
+			//Filter 1: Lowe's ratio
+			vector<vector<DMatch>> matches;
 			matcher.knnMatch(descriptors_1, descriptors_2, matches, 5);
-			cout << "Matching finalizado" << endl;
-
 			vector<DMatch> good_matches;
 			const float ratio = 0.8;
-
 			for (int i = 0; i < matches.size(); i++)
 			{
 				if (matches[i][0].distance < ratio * matches[i][1].distance)
@@ -98,7 +97,6 @@ int main(int argc, char** argv)
 				}
 
 			}
-
 			cout << good_matches.size() << " puntos filtrados con Lowe's Ratio " << endl;
 
 
@@ -126,8 +124,10 @@ int main(int argc, char** argv)
 			imshow("matches", img_matches);
 			imshow("frame", frame);
 		}
-		else
+		else {
 			cout << "El descriptor del frame estaba vacio" << endl;
+			imshow("ROI", ROI);
+		}
 
 		//exit with ESC key
 		if (waitKey(-1) == 27)
@@ -178,21 +178,13 @@ Mat FindMark(Mat * thresh, Mat * frame)
 			}
 		}
 	}
-	
-	//Draw points
-	Mat frame_copy = frame->clone();
-	/*if (ROI_found) {
-		for (i = 0; i < poligon.size();i++) {
-			putText(*frame, "P", poligon[i], FONT_HERSHEY_SIMPLEX, 10, Scalar(0, 255, 0));
-		}
-	}*/
 
 	//Return a Rect enclosing the biggest rectangle
 	//and prevent assertion errors
-	rectBoundedToMark = boundingRect(best_candidate);
-
 	//if there is no candidate
 	//search on the whole image
+	Mat frame_copy = frame->clone();
+	rectBoundedToMark = boundingRect(best_candidate);
 	if (ROI_found) {
 		cout << "Marca encontrada" << endl;
 		return frame_copy(rectBoundedToMark);
