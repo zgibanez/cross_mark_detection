@@ -149,6 +149,11 @@ Mat FindMark(Mat * thresh, Mat * frame)
 	Rect rectBoundedToMark;
 	Mat frame_thresh_copy = thresh->clone();
 
+	//preprocess image
+	dilate(frame_thresh_copy, frame_thresh_copy, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+	erode(frame_thresh_copy, frame_thresh_copy, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+	GaussianBlur(frame_thresh_copy, frame_thresh_copy, Size(3, 3), 4);
+
 	//find contours on the frame
 	Mat canny;
 	cout << " Buscando contornos... ";
@@ -159,7 +164,7 @@ Mat FindMark(Mat * thresh, Mat * frame)
 	//approximate contours to poligons
 	int i;
 	double peri;
-	float MinArea = 100;
+	float MinArea = 300;
 	bool ROI_found = false;
 
 	for (i = 0; i < cnts.size(); i++) {
