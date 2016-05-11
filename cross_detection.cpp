@@ -49,7 +49,7 @@ int main(int argc, char** argv)
 	/// -- STEP 2 : Load video and binarize frame
 
 	//load video
-	VideoCapture capture("C:/images/video1.mp4");
+	VideoCapture capture("C:/images/video4.mp4");
 	if (!capture.isOpened())
 		throw "Error: cannot read video";
 
@@ -85,9 +85,9 @@ int main(int argc, char** argv)
 		if (!descriptors_2.empty())
 		{
 			//Filter 1: Lowe's ratio
-			vector<vector<DMatch>> matches;
+			std::vector<vector<cv::DMatch>> matches;
 			matcher.knnMatch(descriptors_1, descriptors_2, matches, 5);
-			vector<DMatch> good_matches;
+			vector<DMatch> good_matches; 
 			const float ratio = 0.8;
 			for (int i = 0; i < matches.size(); i++)
 			{
@@ -123,6 +123,12 @@ int main(int argc, char** argv)
 				vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
 			imshow("matches", img_matches);
 			imshow("frame", frame);
+
+			//empty vectors
+			good_matches.clear();
+			good_matches2.clear();
+			matches.clear();
+			keypoints_2.clear();
 		}
 		else {
 			cout << "El descriptor del frame estaba vacio" << endl;
@@ -150,8 +156,8 @@ Mat FindMark(Mat * thresh, Mat * frame)
 	Mat frame_thresh_copy = thresh->clone();
 
 	//preprocess image
-	dilate(frame_thresh_copy, frame_thresh_copy, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
-	erode(frame_thresh_copy, frame_thresh_copy, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+	dilate(frame_thresh_copy, frame_thresh_copy, getStructuringElement(MORPH_ELLIPSE, Size(3, 3)));
+	erode(frame_thresh_copy, frame_thresh_copy, getStructuringElement(MORPH_ELLIPSE, Size(3, 3)));
 	GaussianBlur(frame_thresh_copy, frame_thresh_copy, Size(3, 3), 4);
 
 	//find contours on the frame
