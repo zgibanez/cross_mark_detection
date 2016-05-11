@@ -12,6 +12,7 @@ using namespace cv::xfeatures2d;
 
 //Additional functions
 Mat FindMark(Mat* thresh, Mat* frame);
+void DrawOutline(vector<Point> poligon, Mat *frame);
 
 int main(int argc, char** argv)
 {
@@ -49,7 +50,7 @@ int main(int argc, char** argv)
 	/// -- STEP 2 : Load video and binarize frame
 
 	//load video
-	VideoCapture capture("C:/images/video4.mp4");
+	VideoCapture capture("C:/images/video2.mp4");
 	if (!capture.isOpened())
 		throw "Error: cannot read video";
 
@@ -177,10 +178,10 @@ Mat FindMark(Mat * thresh, Mat * frame)
 		peri = arcLength(cnts[i], 1);
 		approxPolyDP(cnts[i], poligon, peri*0.03, 1);
 
-		//find the contour with 4 sides and the biggest area
+		//find the contour with 4 or 5 sides and the biggest area
 		Moments M;
 		M = moments(cnts[i], true);
-		if (poligon.size() == 4)
+		if (poligon.size() == 4 || poligon.size() == 5)
 		{
 			if (M.m00 > MinArea) {
 				best_candidate = poligon;
@@ -190,15 +191,9 @@ Mat FindMark(Mat * thresh, Mat * frame)
 		}
 	}
 
-	//draw points
+	//Draw the result
 	if (!best_candidate.empty()) {
-		for (i = 0; i < best_candidate.size(); i++) {
-			putText(*frame, "P", Point(best_candidate[i].x, best_candidate[i].y), FONT_HERSHEY_SIMPLEX, 0.3, Scalar(0, 255, 0));
-		}
-		line(*frame, best_candidate[0], best_candidate[1], Scalar(255, 0, 0));
-		line(*frame, best_candidate[1], best_candidate[2], Scalar(255, 0, 0));
-		line(*frame, best_candidate[2], best_candidate[3], Scalar(255, 0, 0));
-		line(*frame, best_candidate[3], best_candidate[0], Scalar(255, 0, 0));
+		DrawOutline(best_candidate, frame);
 	}
 
 	//Return a Rect enclosing the biggest rectangle
@@ -207,6 +202,7 @@ Mat FindMark(Mat * thresh, Mat * frame)
 	//search on the whole image
 	Mat frame_copy = frame->clone();
 	rectBoundedToMark = boundingRect(best_candidate);
+
 	if (ROI_found) {
 		cout << "Marca encontrada" << endl;
 		return frame_copy(rectBoundedToMark);
@@ -215,4 +211,17 @@ Mat FindMark(Mat * thresh, Mat * frame)
 		cout << "Marca no encontrada" << endl;
 		return frame_copy;
 	}
+}
+
+//This function recieves an set of points and draws
+//on the Mat "frame" the poligon they form
+void DrawOutline(vector<Point> poligon, Mat *frame) {
+
+		for (int i = 0; i < poligon.size(); i++) {
+			putText(*frame, "P", Point(poligon[i].x, poligon[i].y), FONT_HERSHEY_SIMPLEX, 0.3, Scalar(0, 255, 0));
+			if (i<poligon.size() - 1)
+				line(*frame, poligon[i], poligon[i + 1], Scalar(255, 0, 0));
+			else
+				line(*frame, poligon[poligon.size() - 1], poligon[0], Scalar(255, 0, 0));
+		}
 }
