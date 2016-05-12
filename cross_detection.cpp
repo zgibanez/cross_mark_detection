@@ -6,16 +6,21 @@
 #include "opencv2/highgui.hpp"
 #include "opencv2/opencv.hpp"
 
+#define FORWARD 255904
+#define BACK	2424832
+
 using namespace cv;
 using namespace std;
 using namespace cv::xfeatures2d;
 
 //Additional functions
 Mat FindMark(Mat* thresh, Mat* frame);
+void DrawOutline(vector<Point> poligon, Mat *frame);
+void DivideSquare(vector<Point> poligon, Mat *frame);
+float distance(Point p1, Point p2);
 
 int main(int argc, char** argv)
 {
-
 
 	///-- STEP 1 : Extract features from template
 
@@ -33,7 +38,7 @@ int main(int argc, char** argv)
 	Mat descriptors_1, descriptors_2;
 
 	//set feature detector
-	Ptr<SiftFeatureDetector> detector = SiftFeatureDetector::create(0, 3, 0.04, 10, 0.8);
+	Ptr<SiftFeatureDetector> detector = SiftFeatureDetector::create(0, 3, 0.04, 10, 0.9);
 	detector->detect(img, keypoints_1);
 
 	//set descriptor extractor
@@ -49,7 +54,7 @@ int main(int argc, char** argv)
 	/// -- STEP 2 : Load video and binarize frame
 
 	//load video
-	VideoCapture capture("C:/images/video4.mp4");
+	VideoCapture capture("C:/images/video3.mp4");
 	if (!capture.isOpened())
 		throw "Error: cannot read video";
 
@@ -67,7 +72,7 @@ int main(int argc, char** argv)
 		adaptiveThreshold(frame_gray, frame_thresh, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 15, 2);
 		imshow("Adaptative threshold", frame_thresh);
 
-		///-- STEP 3: Find in the thresholded frame the mark's outline with shape detection
+		///-- STEP 3: Find in the thresholded possible mark outlines with shape detection
 		/// we will use the outline as our ROI
 		Mat ROI;
 		ROI = FindMark(&frame_thresh, &frame);
@@ -87,7 +92,7 @@ int main(int argc, char** argv)
 			//Filter 1: Lowe's ratio
 			std::vector<vector<cv::DMatch>> matches;
 			matcher.knnMatch(descriptors_1, descriptors_2, matches, 5);
-			vector<DMatch> good_matches; 
+			vector<DMatch> good_matches;
 			const float ratio = 0.8;
 			for (int i = 0; i < matches.size(); i++)
 			{
@@ -112,10 +117,8 @@ int main(int argc, char** argv)
 				if (backward.trainIdx == forward.queryIdx)
 					good_matches2.push_back(forward);
 			}
-
 			cout << good_matches2.size() << " puntos filtrados con Cross-checking " << endl;
 
-			//Filter 3: Symmetry Test
 
 			///--Step 6: Present data
 			Mat img_matches;
@@ -151,43 +154,55 @@ int main(int argc, char** argv)
 Mat FindMark(Mat * thresh, Mat * frame)
 {
 	vector<vector<Point>> cnts;
-	vector<Point> poligon, best_candidate;
+	vector<Point> poligon;
+	vector<vector<Point>> candidates;
 	Rect rectBoundedToMark;
 	Mat frame_thresh_copy = thresh->clone();
 
 	//preprocess image
-	dilate(frame_thresh_copy, frame_thresh_copy, getStructuringElement(MORPH_ELLIPSE, Size(3, 3)));
-	erode(frame_thresh_copy, frame_thresh_copy, getStructuringElement(MORPH_ELLIPSE, Size(3, 3)));
+	dilate(frame_thresh_copy, frame_thresh_copy, getStructuringElement(MORPH_ELLIPSE, Size(4, 4)));
+	erode(frame_thresh_copy, frame_thresh_copy, getStructuringElement(MORPH_ELLIPSE, Size(4, 4)));
 	GaussianBlur(frame_thresh_copy, frame_thresh_copy, Size(3, 3), 4);
 
 	//find contours on the frame
 	Mat canny;
 	cout << " Buscando contornos... ";
-	Canny(frame_thresh_copy.clone(), canny, 250,250*3);
+	Canny(frame_thresh_copy.clone(), canny, 250, 250 * 3);
 	findContours(canny, cnts, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
 	cout << cnts.size() << "  contornos detectados" << endl;
 
 	//approximate contours to poligons
 	int i;
 	double peri;
-	float MinArea = 300;
+	float MinArea = 500;
 	bool ROI_found = false;
 
 	for (i = 0; i < cnts.size(); i++) {
 		peri = arcLength(cnts[i], 1);
-		approxPolyDP(cnts[i], poligon, peri*0.03, 1);
+		approxPolyDP(cnts[i], poligon, peri*0.01, 1);
 
-		//find the contour with 4 sides and the biggest area
+		//find contours with 4 or 5 sides and
+		//a minimun area
 		Moments M;
 		M = moments(cnts[i], true);
-		if (poligon.size() == 4 || poligon.size() == 5)
+		if (poligon.size() == 4)
 		{
 			if (M.m00 > MinArea) {
-				best_candidate = poligon;
-				MinArea = M.m00;
+				candidates.push_back(poligon);
+				//MinArea = M.m00;
 				ROI_found = true;
 			}
 		}
+	}
+
+	//Draw the result on frame
+	if (!candidates.empty()) {
+		cout << "Encontrado(s) " << candidates.size() << " candidato(s)" << endl;
+		for (i = 0; i < candidates.size(); i++) {
+			DrawOutline(candidates[i], frame);
+			DivideSquare(candidates[i], frame);
+		}
+		
 	}
 
 	//Return a Rect enclosing the biggest rectangle
@@ -195,13 +210,62 @@ Mat FindMark(Mat * thresh, Mat * frame)
 	//if there is no candidate
 	//search on the whole image
 	Mat frame_copy = frame->clone();
-	rectBoundedToMark = boundingRect(best_candidate);
 	if (ROI_found) {
 		cout << "Marca encontrada" << endl;
+		rectBoundedToMark = boundingRect(candidates[0]);
 		return frame_copy(rectBoundedToMark);
 	}
 	else {
 		cout << "Marca no encontrada" << endl;
 		return frame_copy;
 	}
+}
+
+//This function recieves an set of points and draws
+//on the Mat "frame" the poligon they form
+void DrawOutline(vector<Point> poligon, Mat *frame) {
+
+		for (int i = 0; i < poligon.size(); i++) {
+			putText(*frame, "P", Point(poligon[i].x, poligon[i].y), FONT_HERSHEY_SIMPLEX, 0.3, Scalar(0, 255, 0));
+			if (i<poligon.size() - 1)
+				line(*frame, poligon[i], poligon[i + 1], Scalar(255, 0, 0));
+			else
+				line(*frame, poligon[poligon.size() - 1], poligon[0], Scalar(255, 0, 0));
+		}
+
+}
+
+//This function separates an arbitrary
+//quadrant of a 4-sided shape
+void DivideSquare(vector<Point> poligon, Mat *frame) {
+
+	//find mean point between two
+	//consecutive points
+	float minx1 = min(poligon[0].x, poligon[1].x);
+	float miny1 = min(poligon[0].y, poligon[1].y);
+	Point p1 = Point(abs(poligon[0].x - poligon[1].x)/2+minx1, abs(poligon[0].y - poligon[1].y)/2+miny1);
+
+	float minx2 = min(poligon[1].x, poligon[2].x);
+	float miny2 = min(poligon[1].y, poligon[2].y);
+	Point p2 = Point(abs(poligon[1].x - poligon[2].x) / 2 + minx2, abs(poligon[1].y - poligon[2].y) / 2 + miny2);
+	
+	//find center of contour
+	Moments M; float cX, cY;
+	M = moments(poligon);
+	cX = M.m10 / M.m00;
+	cY = M.m01 / M.m00;
+	Point center = Point(cX, cY);
+
+	//all these points should form a quadrant
+	//of the square found
+	line(*frame, p1, poligon[1], Scalar(0, 0, 255));
+	line(*frame, poligon[1], p2, Scalar(0, 0, 255));
+	line(*frame, p2, center, Scalar(0, 0, 255));
+	line(*frame, center, p1, Scalar(0, 0, 255));
+
+}
+
+float distance(Point p1, Point p2) {
+	float dist = sqrt(abs(p1.x - p2.x)^2 + abs(p1.y - p2.y)^2);
+	return dist;
 }
