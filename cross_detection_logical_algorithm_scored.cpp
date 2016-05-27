@@ -1,3 +1,20 @@
+/* ALGORITHM:
+
+1-- Load frame and preproccess it
+
+2-- If mark==NOT_FOUND or mark==NO_CANDIDATES:
+	2.1-- Find squares(candidates) on frame
+	2.2-- Evaluate the slope coefficent and the mean value of each square
+	2.3-- Sum scores and take the best one if it passes the minimum score
+	2.4a-- If it doesn't pass, go to step 1. mark==NO_CANDIDATES
+	2.4b-- If it passes, extract its histogram. mark==FOUND
+
+3-- If mark== FOUND
+	3.1 Use CamShift to track the histogram of best candidate.
+	3.2 If tracking window dimentions == 0, mark==NOT_FOUND
+*/
+
+
 #include <stdio.h>
 #include <iostream>
 #include "opencv2/core.hpp"
@@ -30,7 +47,7 @@ int main(int argc, char** argv)
 {
 
 	//load video
-	VideoCapture capture("C:/images/4mmvideo4.mp4");
+	VideoCapture capture("C:/images/video4.mp4");
 	if (!capture.isOpened())
 		throw "Error: cannot read video";
 
@@ -261,8 +278,8 @@ void DrawPoligon(vector<Point> poligon, Mat *frame, Scalar color) {
 
 }
 
-//This function draws the best candidate (red)
-// and the rest of them (blue)
+//This function draws the best candidate in red
+// and the rest of them in blue
 void DrawCandidates(vector<vector<Point>> candidates, Mat * frame, int idx) {
 
 	if (!candidates.empty())
@@ -306,6 +323,7 @@ Mat ExtractRegion(vector<Point> poligon, Mat * frame) {
 	return contour_region;
 }
 
+//This function returns the back projection of the best candidate
 Mat ExtractBackProjection(vector<Point> best_candidate, Mat *frame) {
 
 	static Mat roi;
