@@ -39,15 +39,14 @@ void			DrawPoligon(vector<Point> poligon, Mat *frame, Scalar color);
 void			DrawCandidates(vector<vector<Point>> candidates, Mat * frame, int idx);
 
 //Global variables
-bool mark_found = false;
-enum Status {FOUND, NOT_FOUND, NO_CANDIDATES};
+enum Status {FOUND, NOT_FOUND, NO_CANDIDATES, TRACKED};
 Status mark_status = NOT_FOUND;
 
 int main(int argc, char** argv)
 {
 
 	//load video
-	VideoCapture capture("C:/images/video4.mp4");
+	VideoCapture capture("C:/images/video6.mp4");
 	if (!capture.isOpened())
 		throw "Error: cannot read video";
 
@@ -65,6 +64,7 @@ int main(int argc, char** argv)
 		addWeighted(frame, 1.5, frame, -0.5, 0, frame);
 		cvtColor(frame, frame_gray, COLOR_BGR2GRAY);
 		adaptiveThreshold(frame_gray, frame_thresh, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 15, 2);
+		imshow("threshold", frame_thresh);
 
 		vector<vector<Point>> candidates;
 		static vector<Point> best_candidate; 
@@ -87,7 +87,7 @@ int main(int argc, char** argv)
 			}
 		}
 	
-		if (mark_status == FOUND) {
+		if (mark_status == FOUND || mark_status == TRACKED) {
 			backproj = ExtractBackProjection(best_candidate, &frame);
 			TrackBestCandidate(best_candidate, backproj, &frame);
 		}
@@ -116,15 +116,16 @@ vector<vector<Point>> FindSquares(Mat * thresh, Mat * frame)
 	Mat frame_thresh_copy = thresh->clone();
 
 	//preprocess image
-	dilate(frame_thresh_copy, frame_thresh_copy, getStructuringElement(MORPH_ELLIPSE, Size(4, 4)));
 	erode(frame_thresh_copy, frame_thresh_copy, getStructuringElement(MORPH_ELLIPSE, Size(4, 4)));
+	dilate(frame_thresh_copy, frame_thresh_copy, getStructuringElement(MORPH_ELLIPSE, Size(4, 4)));
 	GaussianBlur(frame_thresh_copy, frame_thresh_copy, Size(3, 3), 4);
 
 	//find contours on the frame
 	Mat canny;
 	cout << " Buscando contornos... ";
 	Canny(frame_thresh_copy.clone(), canny, 250, 250 * 3);
-	findContours(canny, cnts, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
+	//findContours(canny, cnts, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
+	findContours(canny, cnts, CV_RETR_TREE, CV_CHAIN_APPROX_TC89_KCOS);
 	cout << cnts.size() << "  contornos detectados" << endl;
 
 	//approximate contours to poligons
@@ -149,8 +150,8 @@ vector<vector<Point>> FindSquares(Mat * thresh, Mat * frame)
 	}
 
 	//return the possible candidates
-	if (candidates.empty()) cout << "No se han encontrado candidatos" << endl;
-	else					cout << candidates.size() << "  candidatos encontrados" << endl;
+	if (candidates.empty()) cout << "FindSquares: No candidates found" << endl;
+	else					cout << "FindSquares: " << candidates.size() << "  candidates found" << endl;
 	return candidates;
 }
 
@@ -178,7 +179,7 @@ int ScoreSquares(vector<vector<Point>> candidates, Mat* frame) {
 
 	//if none of the candidates passes the minimun score
 	//then we suppose the mark is not found
-	if (highest_score < 1.5) {
+	if (highest_score < 0.3) {
 		idx = -1;
 		mark_status = NO_CANDIDATES;
 		cout << "ScoreSquares: None of the candidates passed the test" << endl;
@@ -195,7 +196,7 @@ int ScoreSquares(vector<vector<Point>> candidates, Mat* frame) {
 //the best candidate
 void TrackBestCandidate(vector<Point> best_candidate, Mat backproj, Mat *frame) {
 
-	TermCriteria  term_crit(CV_TERMCRIT_EPS | CV_TERMCRIT_NUMBER, 100, 1);
+	TermCriteria  term_crit(CV_TERMCRIT_EPS | CV_TERMCRIT_NUMBER, 10, 1);
 	RotatedRect camshift_track_window;
 	Point2f track_window_points[4];
 
@@ -204,7 +205,7 @@ void TrackBestCandidate(vector<Point> best_candidate, Mat backproj, Mat *frame) 
 
 	if (camshift_track_window.size.height > 0 && camshift_track_window.size.width > 0) {
 		for (int j = 0; j < 4; j++) {
-			line(*frame, track_window_points[j], track_window_points[(j + 1) % 4], Scalar(200, 200, 100));
+			line(*frame, track_window_points[j], track_window_points[(j + 1) % 4], Scalar(250, 200, 100));
 		}
 		cout << "TrackBestCandidate: Best candidate successfully tracked" << endl;
 	}
@@ -229,7 +230,7 @@ vector<double> ExtractRegionMean(vector<vector<Point>>candidates, Mat *frame) {
 
 		//Store the normalized value of mean in the output vector
 		Scalar temp_value = mean(contour_region);
-		region_means.push_back(temp_value[0]/180);
+		region_means.push_back(temp_value[2]/255);
 	}
 
 	cout << "ExtractRegionMean: All candidates region means were evaluated" << endl;
@@ -253,6 +254,7 @@ vector<float> ExtractSlopeCoefficent(vector<vector<Point>> candidates) {
 			k1b = abs((candidates[i][3].y - candidates[i][2].y) / (float)(candidates[i][3].x - candidates[i][2].x));
 			k2b = abs((candidates[i][0].y - candidates[i][3].y) / (float)(candidates[i][0].x - candidates[i][3].x));
 
+			//coefficents = slope1/slope2;
 			//take the best coefficent of the square found
 			maxk1 = max(k1a, k1b); mink1 = min(k1a, k1b);
 			maxk2 = max(k2a, k2b); mink2 = min(k2a, k2b);
@@ -326,29 +328,38 @@ Mat ExtractRegion(vector<Point> poligon, Mat * frame) {
 //This function returns the back projection of the best candidate
 Mat ExtractBackProjection(vector<Point> best_candidate, Mat *frame) {
 
-	static Mat roi;
+	Mat roi;
 	static Mat roi_hist;
-	int hbins = 30;
-	int ch[] = { 0 };
-	int histSize[] = { hbins };
+	Rect rect_roi;
+	int hbins = 30, vbins = 30;
+	int ch[] = { 0, 1, 2 };
+	int histSize[] = { hbins, vbins };
 	float hranges[] = { 0, 180 };
-	const float* ranges[] = { hranges };
+	float sranges[] = { 0, 255 };
+	float vranges[] = { 0, 255 };
+	const float* ranges[] = { hranges, sranges, vranges };
 	
-	if (!mark_found) {
+	if (mark_status==FOUND) {
 		roi = ExtractRegion(best_candidate, frame);
+		cvtColor(roi, roi, CV_BGR2HSV);
 		//normalize hue histogram
-		calcHist(&roi, 1, ch, Mat(), roi_hist, 1, histSize, ranges, true, false);
-		normalize(roi_hist, roi_hist, 255, 0, NORM_MINMAX, -1, noArray());
-		mark_found = true;
+		calcHist(&roi, 1, ch, Mat(), roi_hist, 2, histSize, ranges, true, false);
+		normalize(roi_hist, roi_hist, 0, 255, NORM_MINMAX, -1, noArray());
+		mark_status = TRACKED;
 	}
 	
-
 	//extract back projection
 	Mat backproj;
 	Mat frameHSV = frame->clone();
 	cvtColor(frameHSV, frameHSV, CV_BGR2HSV);
 	calcBackProject(&frameHSV, 1, ch, roi_hist, backproj, ranges);
+
+	//process backprojection to get better results
+	erode(backproj, backproj, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+	dilate(backproj, backproj, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+	addWeighted(backproj, 2, backproj, -0.5, 0, backproj);
 	cout << "ExtractBackProjection: Back projection of best candidate evaluated" << endl;
+	imshow("processed backprojection", backproj);
 
 	return backproj;
 }
