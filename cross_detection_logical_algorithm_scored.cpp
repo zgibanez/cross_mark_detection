@@ -31,7 +31,7 @@ using namespace cv::xfeatures2d;
 vector<vector<Point>> FindSquares(Mat * thresh, Mat * frame);
 int				ScoreSquares(vector<vector<Point>> candidates, Mat* frame);
 void			TrackBestCandidate(vector<Point> best_candidate, Mat backproj, Mat *frame);
-Mat				ExtractRegion(vector<Point> poligon, Mat * frame);
+Mat				ExtractRegion(vector<Point> poligon, Mat * frame, Mat * pmask = NULL);
 vector<double>	ExtractRegionMean(vector<vector<Point>>candidates, Mat *frame);
 Mat				ExtractBackProjection(vector<Point> best_candidate, Mat *frame);
 vector<float>	ExtractSlopeCoefficent(vector<vector<Point>> candidates);
@@ -305,7 +305,7 @@ void DrawCandidates(vector<vector<Point>> candidates, Mat * frame, int idx) {
 
 //This function returns a Mat with
 //the isolated region enclosed by poligon
-Mat ExtractRegion(vector<Point> poligon, Mat * frame) {
+Mat ExtractRegion(vector<Point> poligon, Mat * frame, Mat * pmask) {
 
 	vector < vector<Point>> poligons;
 	poligons.push_back(poligon);
@@ -321,6 +321,11 @@ Mat ExtractRegion(vector<Point> poligon, Mat * frame) {
 	frame->copyTo(img_roi, mask);
 	contour_region = img_roi(roi);
 	imshow("ROI used", img_roi);
+
+	//If pmask!=NULL copy mask to pmask
+	if (pmask != NULL) {
+		*pmask = mask.clone();
+	}
 
 	return contour_region;
 }
@@ -341,9 +346,17 @@ Mat ExtractBackProjection(vector<Point> best_candidate, Mat *frame) {
 	
 	if (mark_status==FOUND) {
 		roi = ExtractRegion(best_candidate, frame);
+
+		//take non-zero elements of roi as a mask for calcHist
+		Mat mask = roi.clone();
+		cvtColor(mask, mask, CV_BGR2GRAY);
+		mask.convertTo(mask, CV_8UC1);
+		mask = mask > 0;
+		imshow("mask", mask);
+
+		//normalize histogram
 		cvtColor(roi, roi, CV_BGR2HSV);
-		//normalize hue histogram
-		calcHist(&roi, 1, ch, Mat(), roi_hist, 2, histSize, ranges, true, false);
+		calcHist(&roi, 1, ch, mask, roi_hist, 2, histSize, ranges, true, false);
 		normalize(roi_hist, roi_hist, 0, 255, NORM_MINMAX, -1, noArray());
 		mark_status = TRACKED;
 	}
