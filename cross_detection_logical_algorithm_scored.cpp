@@ -355,9 +355,10 @@ Mat ExtractBackProjection(vector<Point> best_candidate, Mat *frame) {
 	calcBackProject(&frameHSV, 1, ch, roi_hist, backproj, ranges);
 
 	//process backprojection to get better results
-	erode(backproj, backproj, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+	/*erode(backproj, backproj, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
 	dilate(backproj, backproj, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
-	addWeighted(backproj, 2, backproj, -0.5, 0, backproj);
+	addWeighted(backproj, 2, backproj, -0.5, 0, backproj);*/
+	threshold(backproj, backproj, 200, 255, THRESH_OTSU);
 	cout << "ExtractBackProjection: Back projection of best candidate evaluated" << endl;
 	imshow("processed backprojection", backproj);
 
