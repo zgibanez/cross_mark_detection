@@ -375,11 +375,11 @@ vector<int> DetectCross(vector<struct candidate_region> regions, vector<vector<P
 		Mat test = crop(zoom);
 		crop = crop(zoom);
 		Point gcenter(crop.cols/2,crop.rows/2);
-		//int zeros = countNonZero(crop);
+		int zeros = countNonZero(crop);
 		//imshow("TEST", test);
 	
 		//find lines
-		HoughLines(crop, lines, 1, (0.5*CV_PI / 180), 10);
+		HoughLines(crop, lines, 1, (0.5*CV_PI / 180), 0.05*zeros);
 		cvtColor(crop, crop, COLOR_GRAY2BGR);
 		circle(crop, centroid, 5, Scalar(255, 0, 0), 2);
 		circle(crop, gcenter, 5, Scalar(255, 0, 0), 2);
